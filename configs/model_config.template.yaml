@@ -16,11 +16,34 @@
 
 # Default Models
 defaults:
-  model_name: "" # e.g., "gemini-3-pro-preview"
-  image_model_name: "" # e.g., "gemini-3-pro-image-preview"
-  
+  model_name: "" # e.g., "gemini-3-pro-preview" or "qwen-vl-plus"
+  image_model_name: "" # e.g., "gemini-3-pro-image-preview", "gpt-image-1", "wanxiang", "sdxl"
+
 # API Keys. If you are using all gemini models, you can leave the other keys empty.
 api_keys:
   google_api_key: "" # e.g. "xxxxxxxxxxxxx"
   openai_api_key: ""
   anthropic_api_key: ""
+  dashscope_api_key: "" # For Qwen multimodal (OpenAI-compatible) and Tongyi Wanxiang image generation
+
+# OpenAI-compatible base URL (optional).
+# Set this to use a custom OpenAI-compatible endpoint such as Qwen via DashScope.
+# Example: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+# Leave empty ("") to use the default OpenAI endpoint.
+openai_base_url: ""
+
+# Image Generation Provider Configuration
+# Configure alternative image generation backends here.
+# Set image_model_name (above) to "wanxiang" or "sdxl" to activate these providers.
+image_providers:
+  # Tongyi Wanxiang (text-to-image and image editing via DashScope)
+  wanxiang:
+    model: "wanx2.1-t2i-plus"       # Text-to-image model (e.g., wanx-v1, wanx2.1-t2i-plus)
+    edit_model: "wanx2.1-imageedit"  # Image editing model for the refine flow
+
+  # Self-hosted SDXL / Flux via HTTP (e.g., Automatic1111 / ComfyUI / custom REST)
+  sdxl:
+    endpoint: ""            # e.g., "http://localhost:7860"
+    auth_header: ""         # Optional: "Bearer <token>" or "Basic <base64-credentials>"
+    txt2img_path: "/sdapi/v1/txt2img"   # Path for text-to-image
+    img2img_path: "/sdapi/v1/img2img"   # Path for image editing / refinement
