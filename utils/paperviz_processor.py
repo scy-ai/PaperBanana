@@ -186,7 +186,7 @@ class PaperVizProcessor:
         all_result_list = []
         eval_dims = ["faithfulness", "conciseness", "readability", "aesthetics", "overall"]
 
-        with tqdm(total=len(tasks), desc="Processing concurrently") as pbar:
+        with tqdm(total=len(tasks), desc="Processing concurrently",ascii=True) as pbar:
             # Iterate through completed tasks returned by as_completed
             for future in asyncio.as_completed(tasks):
                 result_data = await future
@@ -195,7 +195,6 @@ class PaperVizProcessor:
 
                 for dim in eval_dims:
                     winner_key = f"{dim}_outcome"
-
                     if winner_key in result_data:
                         winners = [d.get(winner_key) for d in all_result_list]
                         total = len(winners)

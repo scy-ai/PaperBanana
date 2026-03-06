@@ -33,6 +33,15 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent))
 
 print("DEBUG: Importing agents...")
+import yaml
+import shutil
+configs_dir = Path(__file__).parent / "configs"
+config_path = configs_dir / "model_config.yaml"
+template_path = configs_dir / "model_config.template.yaml"
+
+if not config_path.exists() and template_path.exists():
+    print(f"DEBUG: {config_path.name} not found. Auto-generating from template")
+    shutil.copy2(template_path, config_path)
 try:
     from agents.planner_agent import PlannerAgent
     print("DEBUG: Imported PlannerAgent")
@@ -47,8 +56,6 @@ try:
     from utils.paperviz_processor import PaperVizProcessor
     print("DEBUG: Imported utils")
 
-    import yaml
-    config_path = Path(__file__).parent / "configs" / "model_config.yaml"
     model_config_data = {}
     if config_path.exists():
         with open(config_path, "r", encoding="utf-8") as f:
