@@ -42,9 +42,40 @@ cd PaperBanana
 ### Step2: Configuration
 PaperBanana supports configuring API keys from a YAML configuration file or via environment variables. 
 
-We recommend duplicate the `configs/model_config.template.yaml` file into `configs/model_config.yaml` to externalize all user configurations. This file is ignored by git to keep your api keys and configurations secret. In `model_config.yaml`, remember to fill in the two model names (`defaults.model_name` and `defaults.image_model_name`) and set at least one API key under `api_keys` (e.g. `google_api_key` for Gemini models).
+We recommend duplicating the `configs/model_config.template.yaml` file into `configs/model_config.yaml` to externalize all user configurations. This file is ignored by git to keep your api keys and configurations secret. In `model_config.yaml`, remember to fill in the two model names (`defaults.model_name` and `defaults.image_model_name`) and set at least one API key under `api_keys` (e.g. `google_api_key` for Gemini models).
 
 Note that if you need to generate many candidates simultaneously, you will require an API key that supports high concurrency.
+
+#### Supported Reasoning / Text Models
+
+| Provider | `defaults.model_name` example | Required key |
+|---|---|---|
+| Google Gemini | `gemini-2.5-pro-preview-06-05` | `api_keys.google_api_key` or `GOOGLE_API_KEY` |
+| Anthropic Claude | `claude-opus-4-5` | `api_keys.anthropic_api_key` or `ANTHROPIC_API_KEY` |
+| OpenAI GPT | `gpt-4o` | `api_keys.openai_api_key` or `OPENAI_API_KEY` |
+| **Qwen3.5 Plus multimodal** | `qwen-vl-plus` | `api_keys.dashscope_api_key` or `DASHSCOPE_API_KEY` |
+
+> **Qwen multimodal setup**: Set `api_keys.dashscope_api_key` (or `DASHSCOPE_API_KEY` env var). The DashScope OpenAI-compatible endpoint is used automatically (`https://dashscope.aliyuncs.com/compatible-mode/v1`). If you have a different OpenAI-compatible endpoint, override it with `openai_base_url` in the config or the `OPENAI_BASE_URL` env var.
+
+#### Supported Image Generation Models
+
+| Provider | `defaults.image_model_name` example | Notes |
+|---|---|---|
+| Google Gemini | `gemini-2.0-flash-preview-image-generation` | `GOOGLE_API_KEY` required |
+| OpenAI GPT-Image | `gpt-image-1` | `OPENAI_API_KEY` required |
+| **Tongyi Wanxiang** | `wanxiang` | `DASHSCOPE_API_KEY` required; configure model in `image_providers.wanxiang` |
+| **Self-hosted SDXL/Flux** | `sdxl` | Set `image_providers.sdxl.endpoint`; no cloud key needed |
+
+> **Wanxiang setup**: Set `api_keys.dashscope_api_key`. Optionally customise the model under `image_providers.wanxiang.model` (default: `wanx2.1-t2i-plus`).
+
+> **SDXL/Flux setup**: Start an [Automatic1111](https://github.com/AUTOMATIC1111/stable-diffusion-webui) or compatible server, then set `image_providers.sdxl.endpoint` (e.g. `http://localhost:7860`). Optionally set `image_providers.sdxl.auth_header` for authentication.
+
+#### Refine Image Tab – Provider Selection
+
+The **Refine Image** tab in the Streamlit demo supports three image-editing backends:
+- **gemini** – Google VertexAI image editing (requires `google_cloud.project_id` config or `GOOGLE_CLOUD_PROJECT` env var)
+- **wanxiang** – Tongyi Wanxiang `wanx2.1-imageedit` (requires `DASHSCOPE_API_KEY`)
+- **sdxl** – Self-hosted SDXL/Flux img2img (requires `image_providers.sdxl.endpoint` config)
 
 ### Step3: Downloading the Dataset
 First download [PaperBananaBench](https://huggingface.co/datasets/dwzhu/PaperBananaBench), then place it under the `data` directory (e.g., `data/PaperBananaBench/`). The framework is designed to function gracefully without the dataset by bypassing the Retriever Agent's few-shot learning capability. If interested in the original PDFs, please download them from [PaperBananaDiagramPDFs](https://huggingface.co/datasets/dwzhu/PaperBananaDiagramPDFs).

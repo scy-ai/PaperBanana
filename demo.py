@@ -156,73 +156,111 @@ async def process_parallel_candidates(data_list, exp_mode="dev_planner_critic", 
     
     return results
 
-async def refine_image_with_nanoviz(image_bytes, edit_prompt, aspect_ratio="21:9", image_size="2K"):
+async def refine_image(image_bytes, edit_prompt, provider="gemini", aspect_ratio="21:9", image_size="2K"):
     """
-    Refine an image using an Image Editing API.
-    
+    Refine an image using a provider-based image editing API.
+
     Args:
         image_bytes: Image data in bytes
         edit_prompt: Text description of desired changes
-        aspect_ratio: Output aspect ratio (21:9, 16:9, 3:2)
-        image_size: Output resolution (2K or 4K)
-    
+        provider: One of "gemini", "wanxiang", "sdxl"
+        aspect_ratio: Output aspect ratio (21:9, 16:9, 3:2) – used by Gemini
+        image_size: Output resolution (2K or 4K) – used by Gemini
+
     Returns:
         Tuple of (edited_image_bytes, success_message)
     """
     try:
-        from google import genai
-        from google.genai import types
-        
-        # Initialize client
-        project_id = get_config_val("google_cloud", "project_id", "GOOGLE_CLOUD_PROJECT", "")
-        location = get_config_val("google_cloud", "location", "GOOGLE_CLOUD_LOCATION", "global")
-        
-        client = genai.Client(vertexai=True, project=project_id, location=location)
-        
-        # Prepare content
-        contents = [
-            types.Part.from_text(text=edit_prompt),
-            types.Part.from_bytes(
-                mime_type="image/jpeg",
-                data=image_bytes
+        from utils import generation_utils as gen_utils
+
+        if provider == "gemini":
+            from google import genai
+            from google.genai import types
+
+            project_id = get_config_val("google_cloud", "project_id", "GOOGLE_CLOUD_PROJECT", "")
+            location = get_config_val("google_cloud", "location", "GOOGLE_CLOUD_LOCATION", "global")
+
+            if not project_id:
+                return None, (
+                    "❌ Gemini refinement requires a Google Cloud project. "
+                    "Set google_cloud.project_id in model_config.yaml or GOOGLE_CLOUD_PROJECT env var."
+                )
+
+            client = genai.Client(vertexai=True, project=project_id, location=location)
+            contents = [
+                types.Part.from_text(text=edit_prompt),
+                types.Part.from_bytes(mime_type="image/jpeg", data=image_bytes),
+            ]
+            config = types.GenerateContentConfig(
+                temperature=1.0,
+                max_output_tokens=8192,
+                response_modalities=["IMAGE"],
+                image_config=types.ImageConfig(
+                    aspect_ratio=aspect_ratio,
+                    image_size=image_size,
+                ),
             )
-        ]
-        
-        # Configure generation
-        config = types.GenerateContentConfig(
-            temperature=1.0,
-            max_output_tokens=8192,
-            response_modalities=["IMAGE"],
-            image_config=types.ImageConfig(
-                aspect_ratio=aspect_ratio,
-                image_size=image_size,
-            ),
-        )
-        
-        # Generate refined image
-        image_model = get_config_val("defaults", "image_model_name", "IMAGE_MODEL_NAME", "")
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model=image_model,
-            contents=contents,
-            config=config
-        )
-        
-        # Extract image from response
-        if response.candidates and response.candidates[0].content.parts:
-            for part in response.candidates[0].content.parts:
-                if hasattr(part, 'inline_data') and part.inline_data:
-                    edited_image_data = part.inline_data.data
-                    
-                    if isinstance(edited_image_data, bytes):
-                        return edited_image_data, "✅ Image refined successfully!"
-                    elif isinstance(edited_image_data, str):
-                        return base64.b64decode(edited_image_data), "✅ Image refined successfully!"
-        
-        return None, "❌ No image data found in response"
-    
+            image_model = get_config_val("defaults", "image_model_name", "IMAGE_MODEL_NAME", "")
+            if not image_model:
+                return None, "❌ No image model configured. Set defaults.image_model_name in model_config.yaml."
+
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=image_model,
+                contents=contents,
+                config=config,
+            )
+
+            if response.candidates and response.candidates[0].content.parts:
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, "inline_data") and part.inline_data:
+                        edited_image_data = part.inline_data.data
+                        if isinstance(edited_image_data, bytes):
+                            return edited_image_data, "✅ Image refined successfully!"
+                        elif isinstance(edited_image_data, str):
+                            return base64.b64decode(edited_image_data), "✅ Image refined successfully!"
+            return None, "❌ No image data found in Gemini response."
+
+        elif provider == "wanxiang":
+            result_list = await gen_utils.call_wanxiang_image_generation_async(
+                prompt=edit_prompt,
+                image_bytes=image_bytes,
+                max_attempts=5,
+                retry_delay=10,
+                error_context="refine",
+            )
+            if result_list and result_list[0] != "Error":
+                return base64.b64decode(result_list[0]), "✅ Image refined with Wanxiang successfully!"
+            return None, "❌ Wanxiang image refinement failed. Check your DASHSCOPE_API_KEY and wanxiang config."
+
+        elif provider == "sdxl":
+            result_list = await gen_utils.call_sdxl_image_generation_async(
+                prompt=edit_prompt,
+                image_bytes=image_bytes,
+                max_attempts=5,
+                retry_delay=10,
+                error_context="refine",
+            )
+            if result_list and result_list[0] != "Error":
+                return base64.b64decode(result_list[0]), "✅ Image refined with SDXL/Flux successfully!"
+            return None, "❌ SDXL/Flux image refinement failed. Check your endpoint configuration."
+
+        else:
+            return None, f"❌ Unknown refine provider: '{provider}'. Choose gemini, wanxiang, or sdxl."
+
     except Exception as e:
         return None, f"❌ Error: {str(e)}"
+
+
+async def refine_image_with_nanoviz(image_bytes, edit_prompt, aspect_ratio="21:9", image_size="2K"):
+    """Backward-compatible wrapper – calls refine_image with the Gemini provider."""
+    return await refine_image(
+        image_bytes=image_bytes,
+        edit_prompt=edit_prompt,
+        provider="gemini",
+        aspect_ratio=aspect_ratio,
+        image_size=image_size,
+    )
 
 
 def get_evolution_stages(result, exp_mode):
@@ -699,13 +737,25 @@ The framework extends to statistical plots by adjusting the Visualizer and Criti
         # Sidebar for refinement settings
         with st.sidebar:
             st.title("✨ Refinement Settings")
+
+            refine_provider = st.selectbox(
+                "Refine Provider",
+                ["gemini", "wanxiang", "sdxl"],
+                index=0,
+                key="refine_provider",
+                help=(
+                    "gemini: Google VertexAI image editing (requires google_cloud.project_id config or GOOGLE_CLOUD_PROJECT env var). "
+                    "wanxiang: Tongyi Wanxiang image editing (requires DASHSCOPE_API_KEY). "
+                    "sdxl: Self-hosted SDXL/Flux img2img (requires image_providers.sdxl.endpoint config)."
+                ),
+            )
             
             refine_resolution = st.selectbox(
                 "Target Resolution",
                 ["2K", "4K"],
                 index=0,
                 key="refine_resolution",
-                help="Higher resolution takes longer but produces better quality"
+                help="Higher resolution takes longer but produces better quality (Gemini only)"
             )
             
             refine_aspect_ratio = st.selectbox(
@@ -713,7 +763,7 @@ The framework extends to statistical plots by adjusting the Visualizer and Criti
                 ["21:9", "16:9", "3:2"],
                 index=0,
                 key="refine_aspect_ratio",
-                help="Aspect ratio for the refined image"
+                help="Aspect ratio for the refined image (Gemini only)"
             )
         
         st.divider()
@@ -749,20 +799,20 @@ The framework extends to statistical plots by adjusting the Visualizer and Criti
                     if not edit_prompt:
                         st.error("Please provide edit instructions!")
                     else:
-                        with st.spinner(f"Refining image to {refine_resolution} resolution... This may take a minute."):
+                        with st.spinner(f"Refining image via {refine_provider}... This may take a minute."):
                             try:
                                 # Convert PIL image to bytes
                                 img_byte_arr = BytesIO()
                                 uploaded_image.save(img_byte_arr, format='JPEG')
                                 image_bytes = img_byte_arr.getvalue()
                                 
-                                # Call nanoviz API
                                 refined_bytes, message = asyncio.run(
-                                    refine_image_with_nanoviz(
+                                    refine_image(
                                         image_bytes=image_bytes,
                                         edit_prompt=edit_prompt,
+                                        provider=refine_provider,
                                         aspect_ratio=refine_aspect_ratio,
-                                        image_size=refine_resolution
+                                        image_size=refine_resolution,
                                     )
                                 )
                                 

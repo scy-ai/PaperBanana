@@ -18,9 +18,7 @@ Vanilla Agent - Directly rendering images based on the method section.
 
 import json
 from typing import Dict, Any
-from google.genai import types
 import base64, io, asyncio
-from PIL import Image
 
 from utils import generation_utils
 from .base_agent import BaseAgent
@@ -87,8 +85,19 @@ class PlannerAgent(BaseAgent):
             # Resolve relative path using work_dir
             image_path = self.exp_config.work_dir / f"data/PaperBananaBench/{cfg['task_name']}" / item["path_to_gt_image"]
             with open(image_path, "rb") as f:
-                ref_image_base64 = base64.b64encode(f.read()).decode("utf-8")
-            content_list.append({"type": "image", "image_base64": ref_image_base64})
+                ref_image_bytes = f.read()
+            ref_image_base64 = base64.b64encode(ref_image_bytes).decode("utf-8")
+            # Detect MIME type from file extension
+            ext = str(image_path).lower().rsplit(".", 1)[-1]
+            media_type = "image/png" if ext == "png" else "image/jpeg"
+            content_list.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": ref_image_base64,
+                },
+            })
             user_prompt = ""
 
         user_prompt += f"Now, based on the following {cfg['content_label'].lower()} and {cfg['visual_intent_label'].lower()}, provide a detailed description for the figure to be generated.\n"
@@ -100,15 +109,13 @@ class PlannerAgent(BaseAgent):
 
         content_list.append({"type": "text", "text": user_prompt})
 
-        response_list = await generation_utils.call_gemini_with_retry_async(
+        response_list = await generation_utils.call_llm_async(
             model_name=self.model_name,
             contents=content_list,
-            config=types.GenerateContentConfig(
-                system_instruction=self.system_prompt,
-                temperature=self.exp_config.temperature,
-                candidate_count=1,
-                max_output_tokens=50000,
-            ),
+            system_prompt=self.system_prompt,
+            temperature=self.exp_config.temperature,
+            candidate_num=1,
+            max_output_tokens=50000,
             max_attempts=5,
             retry_delay=5,
         )
