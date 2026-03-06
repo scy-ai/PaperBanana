@@ -77,15 +77,13 @@ class PolishAgent(BaseAgent):
         ]
 
         try:
-            response_list = await generation_utils.call_gemini_with_retry_async(
+            response_list = await generation_utils.call_llm_async(
                 model_name=self.text_model_name,
                 contents=content_list,
-                config=types.GenerateContentConfig(
-                    system_instruction=self.suggestion_system_prompt,
-                    temperature=1,
-                    candidate_count=1,
-                    max_output_tokens=50000,
-                ),
+                system_prompt=self.suggestion_system_prompt,
+                temperature=1,
+                candidate_num=1,
+                max_output_tokens=50000,
                 max_attempts=3,
                 retry_delay=10,
             )
@@ -163,20 +161,11 @@ class PolishAgent(BaseAgent):
         
         # Generate polished image
         try:
-            response_list = await generation_utils.call_gemini_with_retry_async(
+            response_list = await generation_utils.call_image_model_async(
                 model_name=self.image_model_name,
-                contents=content_list,
-                config=types.GenerateContentConfig(
-                    system_instruction=self.system_prompt, # Use the simpler task definition prompt
-                    temperature=self.exp_config.temperature,
-                    candidate_count=1,
-                    max_output_tokens=50000,
-                    response_modalities=["IMAGE"],
-                    image_config=types.ImageConfig(
-                        aspect_ratio=data.get("additional_info", {}).get("rounded_ratio", "16:9"),
-                        image_size="1k",
-                    ),
-                ),
+                prompt=user_prompt,
+                aspect_ratio=data.get("additional_info", {}).get("rounded_ratio", "16:9"),
+                image_bytes=base64.b64decode(gt_image_b64),
                 max_attempts=5,
                 retry_delay=30,
             )

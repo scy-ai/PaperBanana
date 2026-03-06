@@ -19,7 +19,6 @@ Vanilla Agent - Directly rendering images based on the method section.
 import json
 import random
 from typing import Dict, Any
-from google.genai import types
 import base64, io, asyncio
 from PIL import Image
 
@@ -159,15 +158,13 @@ class RetrieverAgent(BaseAgent):
         user_prompt += f"Now, based on the Target Input and the Candidate Pool, {cfg['instruction_suffix']}"
         content_list = [{"type": "text", "text": user_prompt}]
         
-        response_list = await generation_utils.call_gemini_with_retry_async(
+        response_list = await generation_utils.call_llm_async(
             model_name=self.model_name,
             contents=content_list,
-            config=types.GenerateContentConfig(
-                system_instruction=self.system_prompt,
-                temperature=self.exp_config.temperature,
-                candidate_count=1,
-                max_output_tokens=50000,
-            ),
+            system_prompt=self.system_prompt,
+            temperature=self.exp_config.temperature,
+            candidate_num=1,
+            max_output_tokens=50000,
             max_attempts=5,
             retry_delay=30,
         )
